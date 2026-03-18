@@ -42,8 +42,3 @@ public class HospitalWallColors : MonoBehaviour
         }
     }
 }
-
-    {
-        wallRenderer.material = redMaterial;
-    }
-}
