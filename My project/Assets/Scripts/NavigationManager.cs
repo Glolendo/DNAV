@@ -3,25 +3,24 @@ using UnityEngine;
 
 public class NavigationManager : MonoBehaviour
 {
-    [Header("Instructor Setup")]
-    [Tooltip("Drag the XR Origin / VR player object here (the thing that moves).")]
+    [Header("Player Setup")]
+    [Tooltip("Drag the XR Origin / player object here.")]
     public Transform playerRoot;
 
     [Tooltip("Assign all destination trigger objects here.")]
     public List<DestinationTrigger> destinations = new List<DestinationTrigger>();
 
-    [Tooltip("Instructor chooses the destination ID to grade (must match a DestinationTrigger.destinationId).")]
-    public string assignedDestinationId = "Radiology";
+    [Header("Trial Flow")]
+    [Tooltip("Sequence of destinations the player must visit in order.")]
+    public List<string> taskSequence = new List<string>();
+
+    private int currentTaskIndex = 0;
 
     [Header("Turn Tracking")]
-    [Tooltip("Minimum yaw change (degrees) to count as a turn.")]
     public float turnAngleThreshold = 30f;
-
-    [Tooltip("Seconds between turn counts to avoid double counting.")]
     public float turnCooldownSeconds = 0.35f;
 
     [Header("Distance / Steps")]
-    [Tooltip("Meters per step used to estimate steps from distance. Adjust if needed.")]
     public float metersPerStep = 0.75f;
 
     // Runtime
@@ -36,8 +35,6 @@ public class NavigationManager : MonoBehaviour
     private int turnCount;
     private float lastTurnTime;
 
-    private DestinationTrigger activeDestination;
-
     void Start()
     {
         BeginRun();
@@ -50,12 +47,12 @@ public class NavigationManager : MonoBehaviour
         // Time
         elapsedTime = Time.time - startTime;
 
-        // Distance (steps)
+        // Distance
         Vector3 currentPos = playerRoot.position;
         distanceMeters += Vector3.Distance(currentPos, lastPos);
         lastPos = currentPos;
 
-        // Turns (yaw)
+        // Turn tracking
         Vector3 fwd = playerRoot.forward;
         fwd.y = 0f;
 
@@ -81,22 +78,13 @@ public class NavigationManager : MonoBehaviour
             return;
         }
 
-        // Find assigned destination
-        activeDestination = null;
-        foreach (var d in destinations)
+        if (taskSequence == null || taskSequence.Count == 0)
         {
-            if (d != null && d.destinationId == assignedDestinationId)
-            {
-                activeDestination = d;
-                break;
-            }
-        }
-
-        if (activeDestination == null)
-        {
-            Debug.LogError($"NavigationManager: No destination found with ID '{assignedDestinationId}'.");
+            Debug.LogError("NavigationManager: No tasks assigned in taskSequence.");
             return;
         }
+
+        currentTaskIndex = 0;
 
         // Reset metrics
         isRunning = true;
@@ -106,13 +94,14 @@ public class NavigationManager : MonoBehaviour
         lastPos = playerRoot.position;
         distanceMeters = 0f;
 
-        Vector3 fwd = playerRoot.forward; fwd.y = 0f;
+        Vector3 fwd = playerRoot.forward;
+        fwd.y = 0f;
         lastForwardFlat = (fwd.sqrMagnitude > 0.0001f) ? fwd.normalized : Vector3.forward;
 
         turnCount = 0;
         lastTurnTime = -999f;
 
-        Debug.Log($"Run started. Assigned destination: {assignedDestinationId}");
+        Debug.Log($"🚀 Run started. First task: {taskSequence[currentTaskIndex]}");
     }
 
     public void EndRun()
@@ -122,24 +111,41 @@ public class NavigationManager : MonoBehaviour
 
         float steps = (metersPerStep > 0f) ? (distanceMeters / metersPerStep) : 0f;
 
-        Debug.Log("=== RUN COMPLETE ===");
-        Debug.Log($"Destination: {assignedDestinationId}");
-        Debug.Log($"Time (s): {elapsedTime:F2}");
+        Debug.Log("=== 🎉 TRIAL COMPLETE ===");
+        Debug.Log($"Total Time (s): {elapsedTime:F2}");
         Debug.Log($"Distance (m): {distanceMeters:F2}");
         Debug.Log($"Estimated steps: {steps:F0}");
         Debug.Log($"Turns: {turnCount}");
     }
 
-    // Call this from triggers
+    // Called by DestinationTrigger
     public void NotifyReachedDestination(DestinationTrigger reached)
     {
-        if (!isRunning) return;
-        if (reached == null) return;
+        if (!isRunning || reached == null) return;
 
-        // Only end if it's the assigned destination
-        if (reached.destinationId == assignedDestinationId)
+        string expected = taskSequence[currentTaskIndex];
+
+        Debug.Log($"📍 Player reached: {reached.destinationId}");
+        Debug.Log($"🎯 Current task: {expected}");
+
+        if (reached.destinationId == expected)
         {
-            EndRun();
+            Debug.Log($"✅ Correct destination!");
+
+            currentTaskIndex++;
+
+            if (currentTaskIndex >= taskSequence.Count)
+            {
+                EndRun();
+            }
+            else
+            {
+                Debug.Log($"➡️ Next Task: {taskSequence[currentTaskIndex]}");
+            }
+        }
+        else
+        {
+            Debug.Log($"❌ Wrong destination! Expected: {expected}");
         }
     }
 }
